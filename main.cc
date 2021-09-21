@@ -12,7 +12,6 @@ enum class token_c { var, opr, mod, unk };
 struct token_t {
 	token_c _class;
 	size_t loc;
-	size_t size;
 	std::string str;
 	opr_t opr;
 	mod_t mod;
@@ -34,17 +33,10 @@ std::vector<std::pair<std::string, mod_t>> const valid_mod {
 	{"!", mod_t::negation}
 };
 
-std::unordered_set<unsigned char> const ignore {' ', '\t', '\n'};
-
-bool test_var(std::string const&);
-opr_t test_opr(std::string const&, size_t, size_t&);
-mod_t test_mod(std::string const&, size_t, size_t&);
-bool test_ignore(unsigned char);
+std::unordered_set<unsigned char> const whitespace {' ', '\t', '\n'};
 
 std::vector<token_t> token_parse(std::string const&);
 bool token_validate(std::vector<token_t> const&, std::string const&);
-
-void error_draw(std::string const&, size_t, size_t);
 
 int main(int argc, char* argv[]) {
 	std::ios_base::sync_with_stdio(false);
@@ -73,46 +65,29 @@ int main(int argc, char* argv[]) {
 	return 0;
 }
 
-bool test_var(std::string const& s) {
-	for (auto i : s)
-		if (valid_var.find(i) == valid_var.end())
-			return false;
-	return true;
-}
-
-opr_t test_opr(std::string const& s, size_t p, size_t& len) {
-	for (auto const& i : valid_opr)
-		if (!s.compare(p, i.first.size(), i.first)) {
-			len = i.first.size();
-			return i.second;
-		}
-	return opr_t::unk;
-}
-
-mod_t test_mod(std::string const& s, size_t p, size_t& len) {
-	for (auto const& i : valid_mod)
-		if (!s.compare(p, i.first.size(), i.first)) {
-			len = i.first.size();
-			return i.second;
-		}
-	return mod_t::unk;
-}
-
-bool test_ignore(unsigned char c) {
-	return ignore.find(c) != ignore.end();
-}
-
 std::vector<token_t> token_parse(std::string const& s) {
 	std::vector<token_t> token;
 
 	std::string tmp {""};
 	for (size_t i {0}; i < s.size(); ++i) {
 
-		auto const ignore {test_ignore(s[i])};
-		size_t opr_len;
-		auto const opr {test_opr(s, i, opr_len)};
-		size_t mod_len;
-		auto const mod {test_mod(s, i, mod_len)};
+		auto ignore {whitespace.find(s[i]) != whitespace.end()};
+
+		auto opr_shift {i};
+		auto opr {opr_t::unk};
+		for (auto const& j : valid_opr)
+			if (!s.compare(i, j.first.size(), j.first)) {
+				opr_shift += j.first.size() - 1;
+				opr = j.second;
+			}
+
+		auto mod_shift {i};
+		auto mod {mod_t::unk};
+		for (auto const& j : valid_mod)
+			if (!s.compare(i, j.first.size(), j.first)) {
+				mod_shift += j.first.size() - 1;
+				mod = j.second;
+			}
 
 		if (ignore || opr != opr_t::unk || mod != mod_t::unk || i == s.size()-1) {
 			if (!ignore && opr == opr_t::unk && mod == mod_t::unk) {
@@ -121,33 +96,32 @@ std::vector<token_t> token_parse(std::string const& s) {
 			}
 			if (tmp.size()) {
 				token_t t;
-				if (test_var(tmp))
-					t._class = token_c::var;
-				else
-					t._class = token_c::unk;
+				t._class = token_c::var;
+				for (auto j : tmp)
+					if (valid_var.find(j) == valid_var.end()) {
+						t._class = token_c::unk;
+						break;
+					}
 				t.loc = i - tmp.size();
-				t.size = tmp.size();
 				t.str = std::move(tmp);
-				tmp = "";
 				token.push_back(std::move(t));
+				tmp = "";
 			}
 			if (opr != opr_t::unk) {
 				token_t t;
 				t._class = token_c::opr;
 				t.loc = i;
-				t.size = opr_len;
 				t.opr = opr;
-				i = i + opr_len - 1;
 				token.push_back(std::move(t));
+				i = opr_shift;
 			}
 			if (mod != mod_t::unk) {
 				token_t t;
 				t._class = token_c::mod;
 				t.loc = i;
-				t.size = mod_len;
 				t.mod = mod;
-				i = i + mod_len - 1;
 				token.push_back(std::move(t));
+				i = mod_shift;
 			}
 		}
 		else
@@ -158,20 +132,22 @@ std::vector<token_t> token_parse(std::string const& s) {
 	return token;
 }
 
+void error_draw(std::string const& s, token_t const& t) {
+	std::cerr << s << '\n';
+	for (size_t i {0}; i < t.loc; ++i)
+		std::cerr << ' ';
+	std::cerr << "\"\n";
+	if (t._class == token_c::var || t._class == token_c::unk)
+		std::cerr << t.str << '\n';
+}
+
 bool token_validate(std::vector<token_t> const& t, std::string const& s) {
 	size_t error {0};
 
 	for (auto const& i : t) {
-		error_draw(s, i.loc, i.loc+i.size);
+		error_draw(s, i);
 		std::cout << '\n';
 	}
 
 	return !error;
-}
-
-void error_draw(std::string const& s, size_t start, size_t end) {
-	std::cerr << s << '\n';
-	for (size_t i {0}; i < end; ++i)
-		std::cout << ((i < start) ? ' ' : '"');
-	std::cout << '\n';
 }
