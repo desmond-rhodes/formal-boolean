@@ -225,6 +225,36 @@ size_t token_validate(std::vector<token_t> const& t, std::string const& s) {
 		if (is_drawn)
 			std::cerr << '\n';
 	}
+	{
+		long long bracket {0};
+		for (auto const& i : t)
+			if (i._class == token_c::mod) {
+				if (i.mod == mod_t::start_precedence)
+					++bracket;
+				if (i.mod == mod_t::end_precedence)
+					--bracket;
+			}
+		if (bracket < 0) {
+			std::cerr
+				<< "   " << s << '\n'
+				<< "\"\"\"\n"
+				<< "[0] missing " << bracket*-1 << " opening bracket" << ((bracket*-1 == 1) ? "\n" : "s\n")
+				<< '\n'
+			;
+			++error;
+		}
+		if (bracket > 0) {
+			std::cerr << s << '\n';
+			for (auto c : s)
+				std::cerr << ' ';
+			std::cerr
+				<< "\"\"\"\n"
+				<< '[' << s.size()+1 << "] missing " << bracket << " closing bracket" << ((bracket == 1) ? "\n" : "s\n")
+				<< '\n'
+			;
+			++error;
+		}
+	}
 
 	if (error)
 		std::cerr << error << " syntax error" << ((error == 1) ? " " : "s ") << "were encountered.\n";
