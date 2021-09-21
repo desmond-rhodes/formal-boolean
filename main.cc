@@ -2,6 +2,7 @@
 #include <vector>
 #include <string>
 #include <unordered_set>
+#include <unordered_map>
 #include <utility>
 
 enum class opr_t { conjunction, inclusive_disjunction, exclusive_disjunction, implication, equivalence, unk };
@@ -36,7 +37,21 @@ std::vector<std::pair<std::string, mod_t>> const valid_mod {
 std::unordered_set<unsigned char> const whitespace {' ', '\t', '\n'};
 
 std::vector<token_t> token_parse(std::string const&);
-bool token_validate(std::vector<token_t> const&, std::string const&);
+size_t token_validate(std::vector<token_t> const&, std::string const&);
+
+std::unordered_map<opr_t, std::string> const opr_name {
+	{opr_t::conjunction,           "conjunction"},
+	{opr_t::inclusive_disjunction, "inclusive disjunction"},
+	{opr_t::exclusive_disjunction, "exclusive disjunction"},
+	{opr_t::implication,           "implication"},
+	{opr_t::equivalence,           "equivalence"}
+};
+
+std::unordered_map<mod_t, std::string> const mod_name {
+	{mod_t::start_precedent, "opening parentheses"},
+	{mod_t::end_precedent  , "closing parentheses"},
+	{mod_t::negation       , "negation"}
+};
 
 int main(int argc, char* argv[]) {
 	std::ios_base::sync_with_stdio(false);
@@ -58,7 +73,7 @@ int main(int argc, char* argv[]) {
 	}
 
 	std::vector<token_t> token {token_parse(args.back())};
-	if (!token_validate(token, args.back()))
+	if (token_validate(token, args.back()))
 		return -1;
 
 	std::cout << "Hello, world!\n";
@@ -132,22 +147,86 @@ std::vector<token_t> token_parse(std::string const& s) {
 	return token;
 }
 
-void error_draw(std::string const& s, token_t const& t) {
-	std::cerr << s << '\n';
-	for (size_t i {0}; i < t.loc; ++i)
-		std::cerr << ' ';
-	std::cerr << "\"\n";
-	if (t._class == token_c::var || t._class == token_c::unk)
-		std::cerr << t.str << '\n';
+void error_draw(bool& is_drawn, size_t& error, std::string const& s, size_t loc) {
+	if (!is_drawn) {
+		std::cerr << s << '\n';
+		for (size_t i {0}; i < loc; ++i)
+			std::cerr << ' ';
+		std::cerr << "\"\n";
+		is_drawn = true;
+	}
+	++error;
 }
 
-bool token_validate(std::vector<token_t> const& t, std::string const& s) {
+size_t token_validate(std::vector<token_t> const& t, std::string const& s) {
 	size_t error {0};
 
-	for (auto const& i : t) {
-		error_draw(s, i);
-		std::cout << '\n';
+	for (size_t i {0}; i < t.size(); ++i) {
+		bool is_drawn {false};
+		switch (t[i]._class) {
+
+		case token_c::unk:
+			error_draw(is_drawn, error, s, t[i].loc);
+			std::cerr << '[' << t[i].loc+1 << "] unknown operator or variable: " << t[i].str << '\n';
+			break;
+
+		case token_c::var:
+			if (i > 0 && !(t[i-1]._class == token_c::opr || (t[i-1]._class == token_c::mod && t[i-1].mod != mod_t::end_precedent))) {
+				error_draw(is_drawn, error, s, t[i].loc);
+				std::cerr << '[' << t[i].loc+1 << "] expected an operator before variable " << t[i].str << '\n';
+			}
+			if (i < t.size()-1 && !(t[i+1]._class == token_c::opr || (t[i+1]._class == token_c::mod && t[i+1].mod == mod_t::end_precedent))) {
+				error_draw(is_drawn, error, s, t[i].loc);
+				std::cerr << '[' << t[i].loc+1 << "] expected an operator after variable " << t[i].str << '\n';
+			}
+			break;
+
+		case token_c::opr:
+			if (i == 0 || !(t[i-1]._class == token_c::var || (t[i-1]._class == token_c::mod && t[i-1].mod == mod_t::end_precedent))) {
+				error_draw(is_drawn, error, s, t[i].loc);
+				std::cerr << '[' << t[i].loc+1 << "] expected a variable name before the operator " << opr_name.at(t[i].opr) << '\n';
+			}
+			if (i == t.size()-1 || !(t[i+1]._class == token_c::var || (t[i+1]._class == token_c::mod && t[i+1].mod != mod_t::end_precedent))) {
+				error_draw(is_drawn, error, s, t[i].loc);
+				std::cerr << '[' << t[i].loc+1 << "] expected a variable name after the operator " << opr_name.at(t[i].opr) << '\n';
+			}
+			break;
+
+		case token_c::mod:
+			switch (t[i].mod) {
+
+			case mod_t::start_precedent:
+			case mod_t::negation:
+				if (i > 0 && !(t[i-1]._class == token_c::opr || (t[i-1]._class == token_c::mod && t[i-1].mod != mod_t::end_precedent))) {
+					error_draw(is_drawn, error, s, t[i].loc);
+					std::cerr << '[' << t[i].loc+1 << "] expected an operator before " << mod_name.at(t[i].mod) << '\n';
+				}
+				if (i == t.size()-1 || !(t[i+1]._class == token_c::var || (t[i+1]._class == token_c::mod && t[i+1].mod != mod_t::end_precedent))) {
+					error_draw(is_drawn, error, s, t[i].loc);
+					std::cerr << '[' << t[i].loc+1 << "] expected a variable after " << mod_name.at(t[i].mod) << '\n';
+				}
+				break;
+
+			case mod_t::end_precedent:
+				if (i == 0 || !(t[i-1]._class == token_c::var || (t[i-1]._class == token_c::mod && t[i-1].mod == mod_t::end_precedent))) {
+					error_draw(is_drawn, error, s, t[i].loc);
+					std::cerr << '[' << t[i].loc+1 << "] expected a variable before " << mod_name.at(t[i].mod) << '\n';
+				}
+				if (i < t.size()-1 && !(t[i+1]._class == token_c::opr || (t[i+1]._class == token_c::mod && t[i+1].mod == mod_t::end_precedent))) {
+					error_draw(is_drawn, error, s, t[i].loc);
+					std::cerr << '[' << t[i].loc+1 << "] expected an operator after " << mod_name.at(t[i].mod) << '\n';
+				}
+				break;
+
+			}
+			break;
+
+		}
+		if (is_drawn)
+			std::cerr << '\n';
 	}
 
-	return !error;
+	if (error)
+		std::cerr << error << " syntax error" << ((error == 1) ? " " : "s ") << "were encountered.\n";
+	return error;
 }
