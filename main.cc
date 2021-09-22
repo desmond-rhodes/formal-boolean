@@ -4,6 +4,7 @@
 #include <unordered_set>
 #include <unordered_map>
 #include <utility>
+#include <iomanip>
 
 enum class opr_t { conjunction, inclusive_disjunction, exclusive_disjunction, implication, equivalence, negation, unk };
 enum class mod_t { start_precedence, end_precedence, negation, unk };
@@ -82,25 +83,53 @@ int main(int argc, char* argv[]) {
 
 	auto const stack {stack_parse(token)};
 
-	for (auto i : stack) {
-		switch (i._class) {
-		case token_c::var:
-			std::cout << var.at(i.var);
-			break;
-		case token_c::opr:
-			switch (i.opr) {
-			case opr_t::conjunction:           std::cout << "&";   break;
-			case opr_t::inclusive_disjunction: std::cout << "|";   break;
-			case opr_t::exclusive_disjunction: std::cout << "^";   break;
-			case opr_t::implication:           std::cout << "=>";  break;
-			case opr_t::equivalence:           std::cout << "<=>"; break;
-			case opr_t::negation:              std::cout << "!";   break;
+	for (auto const& i : var)
+		std::cout << i << ' ';
+	std::cout << "   " << args.back() << "    result\n";
+
+	if (var.size()) {
+		std::vector<bool> perm(var.size());
+		for (size_t i {0}; i < perm.size(); ++i)
+			perm[i] = true;
+
+		for (;;) {
+			for (size_t i {0}; i < perm.size(); ++i)
+				std::cout << std::setw(var.at(i).size()) << perm.at(i) << ' ';
+			std::cout << "   ";
+
+			size_t e {0};
+			for (size_t i {0}; i < token.size(); ++i) {
+				if (token.at(i)._class == token_c::var) {
+					auto const b {token.at(i).beg+1};
+					for (size_t j {0}; j < b-e-1; ++j)
+						std::cout << ' ';
+					std::cout << std::setw(var.at(token.at(i).var).size()) << perm.at(token.at(i).var);
+				} else
+					for (size_t j {0}; j < token.at(i).end-e+1; ++j)
+						std::cout << ' ';
+				e = token.at(i).end+1;
 			}
+
+			std::cout << "    result\n";
+
+			for (size_t i {0}; i < perm.size(); ++i)
+				if (perm.at(i))
+					goto skip;
 			break;
+			skip:;
+
+			if (perm.back())
+				perm.back() = false;
+			else {
+				size_t i {perm.size()};
+				for (; !perm.at(i-1); --i)
+					;
+				perm[i-1] = false;
+				for (; i < perm.size(); ++i)
+					perm[i] = true;
+			}
 		}
-		std::cout << ' ';
 	}
-	std::cout << '\n';
 
 	std::cout << "Hello, world!\n";
 	return 0;
