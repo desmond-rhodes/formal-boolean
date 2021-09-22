@@ -57,6 +57,9 @@ std::pair<std::vector<token_t>, std::vector<std::string>> token_parse(std::strin
 size_t token_validate(std::vector<token_t> const&, std::string const&);
 
 std::vector<stack_t> stack_parse(std::vector<token_t> const&);
+bool stack_evaluate(std::vector<stack_t> const&, std::vector<bool> const&);
+
+std::string const result {"result"};
 
 int main(int argc, char* argv[]) {
 	std::ios_base::sync_with_stdio(false);
@@ -69,8 +72,8 @@ int main(int argc, char* argv[]) {
 			<< "\t()  for precedence\n"
 			<< "\t!   for negation\n"
 			<< "\t&   for conjunction\n"
-			<< "\t|   for inclusive_disjunction\n"
-			<< "\t^   for exclusive_disjunction\n"
+			<< "\t|   for inclusive disjunction\n"
+			<< "\t^   for exclusive disjunction\n"
 			<< "\t=>  for implication\n"
 			<< "\t<=> for equivalence\n"
 		;
@@ -82,17 +85,22 @@ int main(int argc, char* argv[]) {
 		return -1;
 
 	auto const stack {stack_parse(token)};
+	std::vector<bool> matrix;
 
-	for (auto const& i : var)
-		std::cout << i << ' ';
-	std::cout << "   " << args.back() << "    result\n";
+	/* Process permutations */
 
 	if (var.size()) {
+		for (auto const& i : var)
+			std::cout << i << ' ';
+		std::cout << "   " << args.back() << "    " << result << '\n';
+
 		std::vector<bool> perm(var.size());
 		for (size_t i {0}; i < perm.size(); ++i)
 			perm[i] = true;
 
 		for (;;) {
+			matrix.push_back(stack_evaluate(stack, perm));
+
 			for (size_t i {0}; i < perm.size(); ++i)
 				std::cout << std::setw(var.at(i).size()) << perm.at(i) << ' ';
 			std::cout << "   ";
@@ -110,7 +118,7 @@ int main(int argc, char* argv[]) {
 				e = token.at(i).end+1;
 			}
 
-			std::cout << "    result\n";
+			std::cout << "    " << std::setw(result.size()) << matrix.back() << '\n';
 
 			for (size_t i {0}; i < perm.size(); ++i)
 				if (perm.at(i))
@@ -131,7 +139,24 @@ int main(int argc, char* argv[]) {
 		}
 	}
 
-	std::cout << "Hello, world!\n";
+	/* Conclusion */
+
+	if (matrix.size()) {
+		size_t t_sum {0};
+		size_t f_sum {0};
+		for (size_t i {0}; i < matrix.size(); ++i)
+			if (matrix[i])
+				++t_sum;
+			else
+				++f_sum;
+		if (t_sum == matrix.size())
+			std::cout << "TAUTOLOGY\n";
+		if (f_sum == matrix.size())
+			std::cout << "CONTRADICTION\n";
+		if (t_sum && f_sum)
+			std::cout << "CONTINGENCY\n";
+	}
+
 	return 0;
 }
 
@@ -349,4 +374,55 @@ std::vector<stack_t> stack_parse(std::vector<token_t> const& token) {
 	}
 
 	return stack;
+}
+
+bool stack_evaluate(std::vector<stack_t> const& s, std::vector<bool> const& v) {
+	std::vector<bool> r;
+	for (auto i : s) {
+		switch (i._class) {
+
+		case token_c::var:
+			r.push_back(v.at(i.var));
+			break;
+
+		case token_c::opr:
+
+			bool a {r.back()};
+			r.pop_back();
+
+			bool b;
+			if (i.opr != opr_t::negation) {
+				b = r.back();
+				r.pop_back();
+			}
+
+			switch (i.opr) {
+			case opr_t::conjunction:
+				r.push_back(a && b);
+				break;
+
+			case opr_t::inclusive_disjunction:
+				r.push_back(a || b);
+				break;
+
+			case opr_t::exclusive_disjunction:
+				r.push_back(a ^ b);
+				break;
+
+			case opr_t::implication:
+				r.push_back(a || !b);
+				break;
+
+			case opr_t::equivalence:
+				r.push_back(!(a ^ b));
+				break;
+
+			case opr_t::negation:
+				r.push_back(!a);
+				break;
+			}
+
+		}
+	}
+	return r.back();
 }
