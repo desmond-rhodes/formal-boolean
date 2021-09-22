@@ -5,17 +5,24 @@
 #include <unordered_map>
 #include <utility>
 
-enum class opr_t { conjunction, inclusive_disjunction, exclusive_disjunction, implication, equivalence, unk };
+enum class opr_t { conjunction, inclusive_disjunction, exclusive_disjunction, implication, equivalence, negation, unk };
 enum class mod_t { start_precedence, end_precedence, negation, unk };
 
 enum class token_c { var, opr, mod, unk };
 
 struct token_t {
 	token_c _class;
-	size_t loc;
-	std::string str;
+	size_t beg;
+	size_t end;
+	size_t var;
 	opr_t opr;
 	mod_t mod;
+};
+
+struct stack_t {
+	token_c _class;
+	size_t var;
+	opr_t opr;
 };
 
 std::unordered_set<unsigned char> const valid_var {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', '_', '-', '.'};
@@ -36,22 +43,19 @@ std::vector<std::pair<std::string, mod_t>> const valid_mod {
 
 std::unordered_set<unsigned char> const whitespace {' ', '\t', '\n'};
 
-std::vector<token_t> token_parse(std::string const&);
+std::unordered_map<opr_t, int> const pre_opr {
+	{opr_t::conjunction,           2},
+	{opr_t::inclusive_disjunction, 2},
+	{opr_t::exclusive_disjunction, 2},
+	{opr_t::implication,           1},
+	{opr_t::equivalence,           1},
+	{opr_t::negation,              3}
+};
+
+std::pair<std::vector<token_t>, std::vector<std::string>> token_parse(std::string const&);
 size_t token_validate(std::vector<token_t> const&, std::string const&);
 
-std::unordered_map<opr_t, std::string> const opr_name {
-	{opr_t::conjunction,           "conjunction"},
-	{opr_t::inclusive_disjunction, "inclusive disjunction"},
-	{opr_t::exclusive_disjunction, "exclusive disjunction"},
-	{opr_t::implication,           "implication"},
-	{opr_t::equivalence,           "equivalence"}
-};
-
-std::unordered_map<mod_t, std::string> const mod_name {
-	{mod_t::start_precedence, "opening parentheses"},
-	{mod_t::end_precedence  , "closing parentheses"},
-	{mod_t::negation       , "negation"}
-};
+std::vector<stack_t> stack_parse(std::vector<token_t> const&);
 
 int main(int argc, char* argv[]) {
 	std::ios_base::sync_with_stdio(false);
@@ -72,17 +76,31 @@ int main(int argc, char* argv[]) {
 		return -1;
 	}
 
-	std::vector<token_t> token {token_parse(args.back())};
+	auto const [token, var] {token_parse(args.back())};
 	if (token_validate(token, args.back()))
 		return -1;
+
+	std::cout << var.size()  << " variable name" << ((var.size() == 1) ? " " : "s ") << "were found\n";
+	std::cout << args.back() << '\n';
+	for (auto t : token)
+		if (t._class == token_c::var) {
+			for (size_t i {0}; i < t.beg; ++i)
+				std::cout << ' ';
+			std::cout << var.at(t.var) << '\n';
+		}
+	std::cout << '\n';
+
+	auto const stack {stack_parse(token)};
 
 	std::cout << "Hello, world!\n";
 	return 0;
 }
 
-std::vector<token_t> token_parse(std::string const& s) {
+std::pair<std::vector<token_t>, std::vector<std::string>> token_parse(std::string const& s) {
 	std::vector<token_t> token;
+	std::vector<std::string> var;
 
+	std::unordered_map<std::string, size_t> hash;
 	std::string tmp {""};
 	for (size_t i {0}; i < s.size(); ++i) {
 
@@ -117,15 +135,24 @@ std::vector<token_t> token_parse(std::string const& s) {
 						t._class = token_c::unk;
 						break;
 					}
-				t.loc = i - tmp.size();
-				t.str = std::move(tmp);
+				if (t._class == token_c::var)
+					if (hash.find(tmp) != hash.end())
+						t.var = hash.at(tmp);
+					else {
+						t.var = var.size();
+						hash[tmp] = t.var;
+						var.push_back(tmp);
+					}
+				t.beg = i - tmp.size();
+				t.end = i -1;
 				token.push_back(std::move(t));
 				tmp = "";
 			}
 			if (opr != opr_t::unk) {
 				token_t t;
 				t._class = token_c::opr;
-				t.loc = i;
+				t.beg = i;
+				t.end = opr_shift;
 				t.opr = opr;
 				token.push_back(std::move(t));
 				i = opr_shift;
@@ -133,7 +160,8 @@ std::vector<token_t> token_parse(std::string const& s) {
 			if (mod != mod_t::unk) {
 				token_t t;
 				t._class = token_c::mod;
-				t.loc = i;
+				t.beg = i;
+				t.end = mod_shift;
 				t.mod = mod;
 				token.push_back(std::move(t));
 				i = mod_shift;
@@ -144,15 +172,17 @@ std::vector<token_t> token_parse(std::string const& s) {
 
 	}
 
-	return token;
+	return {token, var};
 }
 
-void error_draw(bool& is_drawn, size_t& error, std::string const& s, size_t loc) {
+void error_draw(bool& is_drawn, size_t& error, std::string const& s, size_t beg, size_t end) {
 	if (!is_drawn) {
 		std::cerr << s << '\n';
-		for (size_t i {0}; i < loc; ++i)
+		for (size_t i {0}; i < beg; ++i)
 			std::cerr << ' ';
-		std::cerr << "\"\n";
+		for (size_t i {beg}; i <= end; ++i)
+			std::cerr << '~';
+		std::cerr << '\n';
 		is_drawn = true;
 	}
 	++error;
@@ -161,102 +191,77 @@ void error_draw(bool& is_drawn, size_t& error, std::string const& s, size_t loc)
 size_t token_validate(std::vector<token_t> const& t, std::string const& s) {
 	size_t error {0};
 
+	size_t opening_bracket {0};
+	size_t closing_bracket {0};
+
 	for (size_t i {0}; i < t.size(); ++i) {
 		bool is_drawn {false};
-		switch (t[i]._class) {
 
-		case token_c::unk:
-			error_draw(is_drawn, error, s, t[i].loc);
-			std::cerr << '[' << t[i].loc+1 << "] unknown operator or variable: " << t[i].str << '\n';
-			break;
-
-		case token_c::var:
-			if (i > 0 && !(t[i-1]._class == token_c::opr || (t[i-1]._class == token_c::mod && t[i-1].mod != mod_t::end_precedence))) {
-				error_draw(is_drawn, error, s, t[i].loc);
-				std::cerr << '[' << t[i].loc+1 << "] expected an operator before variable " << t[i].str << '\n';
-			}
-			if (i < t.size()-1 && !(t[i+1]._class == token_c::opr || (t[i+1]._class == token_c::mod && t[i+1].mod == mod_t::end_precedence))) {
-				error_draw(is_drawn, error, s, t[i].loc);
-				std::cerr << '[' << t[i].loc+1 << "] expected an operator after variable " << t[i].str << '\n';
-			}
-			break;
-
-		case token_c::opr:
-			if (i == 0 || !(t[i-1]._class == token_c::var || (t[i-1]._class == token_c::mod && t[i-1].mod == mod_t::end_precedence))) {
-				error_draw(is_drawn, error, s, t[i].loc);
-				std::cerr << '[' << t[i].loc+1 << "] expected a variable name before the operator " << opr_name.at(t[i].opr) << '\n';
-			}
-			if (i == t.size()-1 || !(t[i+1]._class == token_c::var || (t[i+1]._class == token_c::mod && t[i+1].mod != mod_t::end_precedence))) {
-				error_draw(is_drawn, error, s, t[i].loc);
-				std::cerr << '[' << t[i].loc+1 << "] expected a variable name after the operator " << opr_name.at(t[i].opr) << '\n';
-			}
-			break;
-
-		case token_c::mod:
-			switch (t[i].mod) {
-
-			case mod_t::start_precedence:
-			case mod_t::negation:
-				if (i > 0 && !(t[i-1]._class == token_c::opr || (t[i-1]._class == token_c::mod && t[i-1].mod != mod_t::end_precedence))) {
-					error_draw(is_drawn, error, s, t[i].loc);
-					std::cerr << '[' << t[i].loc+1 << "] expected an operator before " << mod_name.at(t[i].mod) << '\n';
-				}
-				if (i == t.size()-1 || !(t[i+1]._class == token_c::var || (t[i+1]._class == token_c::mod && t[i+1].mod != mod_t::end_precedence))) {
-					error_draw(is_drawn, error, s, t[i].loc);
-					std::cerr << '[' << t[i].loc+1 << "] expected a variable after " << mod_name.at(t[i].mod) << '\n';
-				}
-				break;
-
-			case mod_t::end_precedence:
-				if (i == 0 || !(t[i-1]._class == token_c::var || (t[i-1]._class == token_c::mod && t[i-1].mod == mod_t::end_precedence))) {
-					error_draw(is_drawn, error, s, t[i].loc);
-					std::cerr << '[' << t[i].loc+1 << "] expected a variable before " << mod_name.at(t[i].mod) << '\n';
-				}
-				if (i < t.size()-1 && !(t[i+1]._class == token_c::opr || (t[i+1]._class == token_c::mod && t[i+1].mod == mod_t::end_precedence))) {
-					error_draw(is_drawn, error, s, t[i].loc);
-					std::cerr << '[' << t[i].loc+1 << "] expected an operator after " << mod_name.at(t[i].mod) << '\n';
-				}
-				break;
-
-			}
-			break;
-
+		if (t[i]._class == token_c::unk) {
+			error_draw(is_drawn, error, s, t[i].beg, t[i].end);
+			std::cerr << '[' << t[i].beg+1 << "] unknown operator or variable.\n";
 		}
+
+		if (t[i]._class == token_c::var || (t[i]._class == token_c::mod && t[i].mod != mod_t::end_precedence))
+			if (i > 0 && !(t[i-1]._class == token_c::opr || (t[i-1]._class == token_c::mod && t[i-1].mod != mod_t::end_precedence))) {
+				error_draw(is_drawn, error, s, t[i].beg, t[i].end);
+				std::cerr << '[' << t[i].beg+1 << "] expected an operator beforehand.\n";
+			}
+
+		if (t[i]._class == token_c::var || (t[i]._class == token_c::mod && t[i].mod == mod_t::end_precedence))
+			if (i < t.size()-1 && !(t[i+1]._class == token_c::opr || (t[i+1]._class == token_c::mod && t[i+1].mod == mod_t::end_precedence))) {
+				error_draw(is_drawn, error, s, t[i].beg, t[i].end);
+				std::cerr << '[' << t[i].beg+1 << "] expected an operator afterwards.\n";
+			}
+
+		if (t[i]._class == token_c::opr || (t[i]._class == token_c::mod && t[i].mod == mod_t::end_precedence))
+			if (i == 0 || !(t[i-1]._class == token_c::var || (t[i-1]._class == token_c::mod && t[i-1].mod == mod_t::end_precedence))) {
+				error_draw(is_drawn, error, s, t[i].beg, t[i].end);
+				std::cerr << '[' << t[i].beg+1 << "] expected a variable name beforehand.\n";
+			}
+
+		if (t[i]._class == token_c::opr || (t[i]._class == token_c::mod && t[i].mod != mod_t::end_precedence))
+			if (i == t.size()-1 || !(t[i+1]._class == token_c::var || (t[i+1]._class == token_c::mod && t[i+1].mod != mod_t::end_precedence))) {
+				error_draw(is_drawn, error, s, t[i].beg, t[i].end);
+				std::cerr << '[' << t[i].beg+1 << "] expected a variable name afterwards.\n";
+			}
+
+		if (t[i]._class == token_c::mod) {
+			if (t[i].mod == mod_t::start_precedence)
+				++opening_bracket;
+			if (t[i].mod == mod_t::end_precedence)
+				++closing_bracket;
+		}
+
 		if (is_drawn)
 			std::cerr << '\n';
 	}
-	{
-		long long bracket {0};
-		for (auto const& i : t)
-			if (i._class == token_c::mod) {
-				if (i.mod == mod_t::start_precedence)
-					++bracket;
-				if (i.mod == mod_t::end_precedence)
-					--bracket;
-			}
-		if (bracket < 0) {
-			std::cerr
-				<< "   " << s << '\n'
-				<< "\"\"\"\n"
-				<< "[0] missing " << bracket*-1 << " opening bracket" << ((bracket*-1 == 1) ? "\n" : "s\n")
-				<< '\n'
-			;
-			++error;
-		}
-		if (bracket > 0) {
-			std::cerr << s << '\n';
-			for (auto c : s)
-				std::cerr << ' ';
-			std::cerr
-				<< "\"\"\"\n"
-				<< '[' << s.size()+1 << "] missing " << bracket << " closing bracket" << ((bracket == 1) ? "\n" : "s\n")
-				<< '\n'
-			;
-			++error;
-		}
+
+	if (closing_bracket > opening_bracket) {
+		auto const bracket {closing_bracket-opening_bracket};
+		++error;
+		for (size_t i {0}; i < bracket; ++i) std::cerr << ' '; std::cerr << s << '\n';
+		for (size_t i {0}; i < bracket; ++i) std::cerr << '~'; std::cerr << '\n';
+		std::cerr << "[0] missing " << bracket << " matching opening bracket" << ((bracket == 1) ? "\n" : "s\n") << '\n';
+	}
+
+	if (opening_bracket > closing_bracket) {
+		auto const bracket {opening_bracket-closing_bracket};
+		++error;
+		std::cerr << s << '\n';
+		for (size_t i {0}; i < s.size(); ++i) std::cerr << ' ';
+		for (size_t i {0}; i < bracket; ++i) std::cerr << '~';
+		std::cerr << '\n';
+		std::cerr << '[' << s.size()+1 << "] missing " << bracket << " matching closing bracket" << ((bracket == 1) ? "\n" : "s\n") << '\n';
 	}
 
 	if (error)
 		std::cerr << error << " syntax error" << ((error == 1) ? " " : "s ") << "were encountered.\n";
 	return error;
+}
+
+std::vector<stack_t> stack_parse(std::vector<token_t> const& t) {
+	std::vector<stack_t> s;
+
+	return s;
 }
