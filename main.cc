@@ -80,17 +80,27 @@ int main(int argc, char* argv[]) {
 	if (token_validate(token, args.back()))
 		return -1;
 
-	std::cout << var.size()  << " variable name" << ((var.size() == 1) ? " " : "s ") << "were found\n";
-	std::cout << args.back() << '\n';
-	for (auto t : token)
-		if (t._class == token_c::var) {
-			for (size_t i {0}; i < t.beg; ++i)
-				std::cout << ' ';
-			std::cout << var.at(t.var) << '\n';
-		}
-	std::cout << '\n';
-
 	auto const stack {stack_parse(token)};
+
+	for (auto i : stack) {
+		switch (i._class) {
+		case token_c::var:
+			std::cout << var.at(i.var);
+			break;
+		case token_c::opr:
+			switch (i.opr) {
+			case opr_t::conjunction:           std::cout << "&";   break;
+			case opr_t::inclusive_disjunction: std::cout << "|";   break;
+			case opr_t::exclusive_disjunction: std::cout << "^";   break;
+			case opr_t::implication:           std::cout << "=>";  break;
+			case opr_t::equivalence:           std::cout << "<=>"; break;
+			case opr_t::negation:              std::cout << "!";   break;
+			}
+			break;
+		}
+		std::cout << ' ';
+	}
+	std::cout << '\n';
 
 	std::cout << "Hello, world!\n";
 	return 0;
@@ -145,7 +155,7 @@ std::pair<std::vector<token_t>, std::vector<std::string>> token_parse(std::strin
 					}
 				t.beg = i - tmp.size();
 				t.end = i -1;
-				token.push_back(std::move(t));
+				token.push_back(t);
 				tmp = "";
 			}
 			if (opr != opr_t::unk) {
@@ -154,7 +164,7 @@ std::pair<std::vector<token_t>, std::vector<std::string>> token_parse(std::strin
 				t.beg = i;
 				t.end = opr_shift;
 				t.opr = opr;
-				token.push_back(std::move(t));
+				token.push_back(t);
 				i = opr_shift;
 			}
 			if (mod != mod_t::unk) {
@@ -163,7 +173,7 @@ std::pair<std::vector<token_t>, std::vector<std::string>> token_parse(std::strin
 				t.beg = i;
 				t.end = mod_shift;
 				t.mod = mod;
-				token.push_back(std::move(t));
+				token.push_back(t);
 				i = mod_shift;
 			}
 		}
@@ -260,8 +270,54 @@ size_t token_validate(std::vector<token_t> const& t, std::string const& s) {
 	return error;
 }
 
-std::vector<stack_t> stack_parse(std::vector<token_t> const& t) {
-	std::vector<stack_t> s;
+std::vector<stack_t> stack_parse(std::vector<token_t> const& token) {
+	std::vector<stack_t> stack;
 
-	return s;
+	std::vector<stack_t> o;
+	std::vector<size_t> p;
+	size_t n {0};
+	for (auto t : token) {
+		stack_t s;
+		s._class = t._class;
+		switch (s._class) {
+		case token_c::var:
+			s.var = t.var;
+			stack.push_back(s);
+			break;
+		case token_c::opr:
+			s.opr = t.opr;
+			break;
+		case token_c::mod:
+			switch (t.mod) {
+			case mod_t::start_precedence:
+				++n;
+				break;
+			case mod_t::end_precedence:
+				--n;
+				break;
+			case mod_t::negation:
+				s._class = token_c::opr;
+				s.opr = opr_t::negation;
+				break;
+			}
+			break;
+		}
+		if (s._class == token_c::opr) {
+			/* Why are things from token_c::mod always badly behaved? */
+			if (!(o.size() && s.opr == opr_t::negation && o.back().opr == opr_t::negation))
+				while (o.size() && (p.back() > n || (p.back() == n && pre_opr.at(o.back().opr) >= pre_opr.at(s.opr)))) {
+					stack.push_back(o.back());
+					o.pop_back();
+					p.pop_back();
+				}
+			o.push_back(s);
+			p.push_back(n);
+		}
+	}
+	while (o.size()) {
+		stack.push_back(o.back());
+		o.pop_back();
+	}
+
+	return stack;
 }
