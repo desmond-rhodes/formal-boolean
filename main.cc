@@ -87,12 +87,32 @@ int main(int argc, char* argv[]) {
 	auto const stack {stack_parse(token)};
 	std::vector<bool> matrix;
 
+	/* Formatting */
+
+	std::string line {"|--"};
+	for (auto const& i : var) {
+		for (auto c : i)
+			line += "-";
+		line += "-";
+	}
+	line += "-|--";
+	for (auto c : args.back())
+		line += "-";
+	line += "--|--";
+	for (auto c : result)
+		line += "-";
+	line += "--|";
+
 	/* Process permutations */
 
 	if (var.size()) {
+		std::cout << '\n' << line << "\n|  ";
 		for (auto const& i : var)
 			std::cout << i << ' ';
-		std::cout << "   " << args.back() << "    " << result << '\n';
+		std::cout
+			<< " |  " << args.back() << "  |  " << result << "  |\n"
+			<< line << '\n'
+		;
 
 		std::vector<bool> perm(var.size());
 		for (size_t i {0}; i < perm.size(); ++i)
@@ -101,9 +121,10 @@ int main(int argc, char* argv[]) {
 		for (;;) {
 			matrix.push_back(stack_evaluate(stack, perm));
 
+			std::cout << "|  ";
 			for (size_t i {0}; i < perm.size(); ++i)
 				std::cout << std::setw(var.at(i).size()) << perm.at(i) << ' ';
-			std::cout << "   ";
+			std::cout << " |  ";
 
 			size_t e {0};
 			for (size_t i {0}; i < token.size(); ++i) {
@@ -118,7 +139,7 @@ int main(int argc, char* argv[]) {
 				e = token.at(i).end+1;
 			}
 
-			std::cout << "    " << std::setw(result.size()) << matrix.back() << '\n';
+			std::cout << "  |  " << std::setw(result.size()) << matrix.back() << "  |\n";
 
 			for (size_t i {0}; i < perm.size(); ++i)
 				if (perm.at(i))
@@ -137,6 +158,8 @@ int main(int argc, char* argv[]) {
 					perm[i] = true;
 			}
 		}
+
+		std::cout << line << '\n';
 	}
 
 	/* Conclusion */
@@ -149,12 +172,17 @@ int main(int argc, char* argv[]) {
 				++t_sum;
 			else
 				++f_sum;
+		std::cout << "\n" << std::setw(line.size()-1);
 		if (t_sum == matrix.size())
-			std::cout << "TAUTOLOGY\n";
+			std::cout << "TAUTOLOGY";
 		if (f_sum == matrix.size())
-			std::cout << "CONTRADICTION\n";
+			std::cout << "CONTRADICTION";
 		if (t_sum && f_sum)
-			std::cout << "CONTINGENCY\n";
+			std::cout << "CONTINGENCY";
+		std::cout << " \n";
+		for (auto c : line)
+			std::cout << '-';
+		std::cout << "\n\n";
 	}
 
 	return 0;
