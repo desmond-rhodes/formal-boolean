@@ -450,6 +450,8 @@ bool stack_evaluate(std::vector<stack_t> const& s, std::vector<bool> const& v) {
 				break;
 			}
 
+			break;
+
 		}
 	}
 	return r.back();
