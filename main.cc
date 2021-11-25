@@ -29,9 +29,9 @@ struct stack_t {
 std::unordered_set<unsigned char> const valid_var {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', '_', '-', '.'};
 
 std::vector<std::pair<std::string, opr_t>> const valid_opr {
-	{"&",   opr_t::conjunction},
-	{"|",   opr_t::inclusive_disjunction},
-	{"^",   opr_t::exclusive_disjunction},
+	{"/\\",   opr_t::conjunction},
+	{"\\/",   opr_t::inclusive_disjunction},
+	{"+",   opr_t::exclusive_disjunction},
 	{"=>",  opr_t::implication},
 	{"<=>", opr_t::equivalence}
 };
@@ -39,7 +39,7 @@ std::vector<std::pair<std::string, opr_t>> const valid_opr {
 std::vector<std::pair<std::string, mod_t>> const valid_mod {
 	{"(", mod_t::start_precedence},
 	{")", mod_t::end_precedence},
-	{"!", mod_t::negation}
+	{"~", mod_t::negation}
 };
 
 std::unordered_set<unsigned char> const whitespace {' ', '\t', '\n'};
@@ -70,10 +70,10 @@ int main(int argc, char* argv[]) {
 		std::cerr
 			<< "usage:\n"
 			<< "\t()  for precedence\n"
-			<< "\t!   for negation\n"
-			<< "\t&   for conjunction\n"
-			<< "\t|   for inclusive disjunction\n"
-			<< "\t^   for exclusive disjunction\n"
+			<< "\t~   for negation\n"
+			<< "\t/\\  for conjunction\n"
+			<< "\t\\/  for inclusive disjunction\n"
+			<< "\t+   for exclusive disjunction\n"
 			<< "\t=>  for implication\n"
 			<< "\t<=> for equivalence\n"
 		;
