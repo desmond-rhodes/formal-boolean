@@ -1,21 +1,20 @@
 OUT := logic
 OBJS := main.o
 
-CXX := g++
 CXXFLAGS := -std=c++17
 
-TMP := .$(OUT)
+DEPFLAGS = -MT $@ -MMD -MP -MF $*.d
 
 $(OUT): $(OBJS)
-	touch $(TMP).cc
-	make $(TMP)
-	mv $(TMP) $@
-	rm -f $(TMP)*
+	$(LINK.cc) $^ $(LOADLIBES) $(LDLIBS) -o $@
 
-$(TMP): $(TMP).cc $(OBJS)
+%.o: %.cc
+	$(COMPILE.cc) $(DEPFLAGS) $(OUTPUT_OPTION) $<
 
 .PHONY: clean
 clean:
+	rm -f *.d
 	rm -f *.o
 	rm -f $(OUT)
-	rm -f $(TMP)*
+
+include $(wildcard $(OBJS:%.o=%.d))
